@@ -1,0 +1,574 @@
+// // app/products/create/page.tsx
+// 'use client';
+//
+// import { useEffect, useState } from 'react';
+// import { useRouter } from 'next/navigation';
+// import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+// import { Database } from '@/lib/database.types';
+// import { supabase } from '@/lib/supabase';
+//
+// export default function CreateProductPage() {
+//   const [name, setName] = useState('');
+//   const [stock, setStock] = useState(0);
+//   const [price, setPrice] = useState(0);
+//   const [description, setDescription] = useState('');
+//   const [brands, setBrands] = useState<any[]>([]); // Массив для брендов
+//   const [brand, setBrand] = useState(''); // ID выбранного бренда
+//   const router = useRouter();
+//
+//   useEffect(() => {
+//     // Получаем список брендов
+//     const fetchBrands = async () => {
+//       const { data, error } = await supabase.from('brands').select('*');
+//       if (error) {
+//         console.error(error);
+//       } else {
+//         setBrands(data);
+//       }
+//     };
+//
+//     fetchBrands();
+//   }, []);
+//
+//   const handleSubmit = async (e: React.FormEvent) => {
+//     e.preventDefault();
+//
+//     if (!name || !brand) {
+//       console.error('Необходимо выбрать бренд и ввести название товара.');
+//       return;
+//     }
+//
+//     // Генерация slug
+//     const slug = name.toLowerCase().replace(/\s+/g, '-');
+//
+//     const { data, error } = await supabase.from('products').insert([
+//       {
+//         name,
+//         brand_id: brand,
+//         stock,
+//         price,
+//         description,
+//         slug
+//       }
+//     ]);
+//
+//     if (error) {
+//       console.error(error);
+//       return;
+//     }
+//
+//     router.push('/admin/products');
+//   };
+//
+//   return (
+//     <form onSubmit={handleSubmit}>
+//       <div>
+//         <label className="block mb-1">Название товара</label>
+//         <input
+//           type="text"
+//           className="w-full border rounded p-2"
+//           value={name}
+//           onChange={(e) => setName(e.target.value)}
+//           required
+//         />
+//       </div>
+//
+//       <div>
+//         <label className="block mb-1">Цена</label>
+//         <input
+//           type="number"
+//           className="w-full border rounded p-2"
+//           value={price}
+//           onChange={(e) => setPrice(Number(e.target.value))}
+//           required
+//         />
+//       </div>
+//
+//       <div>
+//         <label className="block mb-1">Остатки</label>
+//         <input
+//           type="number"
+//           className="w-full border rounded p-2"
+//           value={stock}
+//           onChange={(e) => setStock(Number(e.target.value))}
+//           required
+//         />
+//       </div>
+//
+//       <div>
+//         <label className="block mb-1">Описание товара</label>
+//         <textarea
+//           className="w-full border rounded p-2"
+//           value={description}
+//           onChange={(e) => setDescription(e.target.value)}
+//         />
+//       </div>
+//
+//       <div>
+//         <label className="block mb-1">Бренд</label>
+//         <select
+//           className="w-full border rounded p-2"
+//           value={brand}
+//           onChange={(e) => setBrand(e.target.value)}
+//           required
+//         >
+//           <option value="">Выберите бренд</option>
+//           {brands.map((brandItem) => (
+//             <option key={brandItem.id} value={brandItem.id}>
+//               {brandItem.name} {/* Отображаем имя бренда */}
+//             </option>
+//           ))}
+//         </select>
+//       </div>
+//
+//       <button type="submit" className="w-full mt-4 p-2 bg-blue-500 text-white rounded">
+//         Создать товар
+//       </button>
+//     </form>
+//   );
+// };
+
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabase';
+import { uploadFilesToSupabase } from '@/lib/utils';
+
+const formSchema = z.object({
+  name: z.string().min(3, 'Name must be at least 3 characters'),
+  brand_id: z.string().uuid('Please select a brand'),
+  model: z.string().min(1, 'Model is required'),
+  year: z.coerce.number().min(1900).max(new Date().getFullYear()),
+  volume: z.coerce.number().min(0.1).max(9.9),
+  fuel_type: z.enum(['Бензин', 'Дизель']),
+  body_type: z.enum(['Седан', 'Универсал', 'Хэтчбэк', 'Минивэн', 'Купе', 'Фургон']),
+  transmission: z.enum(['Механика', 'Автомат']),
+  description: z.string().min(10, 'Description must be at least 10 characters'),
+  price: z.coerce.number().positive('Price must be positive'),
+  currency: z.enum(['USD', 'EUR', 'BYN', 'RUB']),
+  condition: z.enum(['Новое', 'Б/У']),
+  images: z.string().array().optional()
+});
+
+type ProductForm = z.infer<typeof formSchema>;
+
+export default function CreateProduct() {
+  const [brands, setBrands] = useState<{ id: string; name: string; }[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [previewImages, setPreviewImages] = useState<{ file: File; url: string }[]>([]);
+  // const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const router = useRouter();
+  const { toast } = useToast();
+
+  const form = useForm<ProductForm>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: '',
+      model: '',
+      year: new Date().getFullYear(),
+      volume: 2.0,
+      fuel_type: 'Бензин',
+      body_type: 'Фургон',
+      transmission: 'Автомат',
+      description: '',
+      price: 0,
+      currency: 'USD',
+      condition: 'Б/У',
+      images: []
+    }
+  });
+
+  // Fetch brands on component mount
+  useEffect(() => {
+    const fetchBrands = async () => {
+      const { data } = await supabase.from('brands').select('id, name');
+      if (data) {
+        setBrands(data);
+        if (data.length > 0) {
+          form.setValue('brand_id', data[0].id);
+        }
+      }
+    };
+    fetchBrands();
+  }, [form]);
+
+  async function onSubmit(data: ProductForm) {
+    try {
+      setIsLoading(true);
+
+      const { error } = await supabase.from('products').insert({
+        ...data,
+        stock: 1 // Default value
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: 'Product created successfully'
+      });
+
+      router.push('/admin/products');
+    } catch (error: any) {
+      console.log({ error });
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  const handleRemoveImage = (index: number) => {
+    setPreviewImages((prev) => {
+      const newPreviews = [...prev];
+      // Освобождаем память от ссылки
+      URL.revokeObjectURL(newPreviews[index].url);
+      newPreviews.splice(index, 1);
+      return newPreviews;
+    });
+
+    // Убираем ссылку из формы
+    form.setValue(
+      'images',
+      (form.getValues('images') || []).filter((_: string, i: number) => i !== index)
+    );
+  };
+
+  return (
+    <div className="container py-10">
+      <h1 className="text-2xl font-bold mb-6">Create New Product</h1>
+
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Product Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Enter product name" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="brand_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Brand</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select brand" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {brands.map((brand) => (
+                        <SelectItem key={brand.id} value={brand.id}>
+                          {brand.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="model"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Car Model</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Enter car model" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="year"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Year</FormLabel>
+                  <FormControl>
+                    <Input type="number" placeholder="Enter year" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="volume"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Engine Volume</FormLabel>
+                  <FormControl>
+                    <Input type="number" step="0.1" placeholder="Enter engine volume" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="fuel_type"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Fuel Type</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select fuel type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="Дизель">Дизель</SelectItem>
+                      <SelectItem value="Бензин">Бензин</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="body_type"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Body Type</FormLabel>
+                  <Select
+                    onValueChange={(value) => field.onChange(value)}
+                    defaultValue={field.value || 'Седан'} // установим дефолтное значение
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select body type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="Седан">Седан</SelectItem>
+                      <SelectItem value="Универсал">Универсал</SelectItem>
+                      <SelectItem value="Хэтчбэк">Хэтчбэк</SelectItem>
+                      <SelectItem value="Минивэн">Минивэн</SelectItem>
+                      <SelectItem value="Купе">Купе</SelectItem>
+                      <SelectItem value="Фургон">Фургон</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="transmission"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Transmission</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Выбор каробки передачь" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="Автомат">Автомат</SelectItem>
+                      <SelectItem value="Механика">Механика</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="price"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Price</FormLabel>
+                  <FormControl>
+                    <Input type="number" step="0.01" placeholder="Enter price" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="currency"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Currency</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select currency" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="USD">USD</SelectItem>
+                      <SelectItem value="EUR">EUR</SelectItem>
+                      <SelectItem value="BYN">BYN</SelectItem>
+                      <SelectItem value="RUB">RUB</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+
+            <FormField
+              control={form.control}
+              name="condition"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Condition</FormLabel>
+                  <Select
+                    onValueChange={(value) => field.onChange(value)}
+                    defaultValue={field.value || 'Б/У'} // установим дефолтное значение
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select condition" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="Новое">Новое</SelectItem>
+                      <SelectItem value="Б/У">Б/У</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+          </div>
+
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Description</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Enter product description"
+                    className="min-h-[100px]"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="images"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Фотографии</FormLabel>
+                <FormControl>
+                  <>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const files = Array.from(e.target.files || []);
+
+                        // 1. Локальный предпросмотр
+                        const localPreviews = files.map((file) => ({
+                          file,
+                          url: URL.createObjectURL(file)
+                        }));
+
+                        setPreviewImages((prev) => [...prev, ...localPreviews]);
+
+                        // 2. Загрузка на Supabase
+                        try {
+                          const urls = await uploadFilesToSupabase(files);
+                          field.onChange([...(field.value || []), ...urls]); // добавляем к существующим
+                        } catch (error) {
+                          console.error('Ошибка загрузки файлов:', error);
+                        }
+                      }}
+                    />
+
+                    {/* Отображение предпросмотра с удалением */}
+                    <div className="flex flex-wrap gap-2 mt-4">
+                      {previewImages.map((preview, index) => (
+                        <div key={index} className="relative w-24 h-24">
+                          <img
+                            src={preview.url}
+                            alt="preview"
+                            className="w-full h-full object-cover rounded-md border"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveImage(index)}
+                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <Button type="submit" disabled={isLoading}>
+            {isLoading ? 'Creating...' : 'Create Product'}
+          </Button>
+        </form>
+      </Form>
+    </div>
+  );
+}
