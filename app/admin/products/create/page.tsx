@@ -1,133 +1,3 @@
-// // app/products/create/page.tsx
-// 'use client';
-//
-// import { useEffect, useState } from 'react';
-// import { useRouter } from 'next/navigation';
-// import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-// import { Database } from '@/lib/database.types';
-// import { supabase } from '@/lib/supabase';
-//
-// export default function CreateProductPage() {
-//   const [name, setName] = useState('');
-//   const [stock, setStock] = useState(0);
-//   const [price, setPrice] = useState(0);
-//   const [description, setDescription] = useState('');
-//   const [brands, setBrands] = useState<any[]>([]); // Массив для брендов
-//   const [brand, setBrand] = useState(''); // ID выбранного бренда
-//   const router = useRouter();
-//
-//   useEffect(() => {
-//     // Получаем список брендов
-//     const fetchBrands = async () => {
-//       const { data, error } = await supabase.from('brands').select('*');
-//       if (error) {
-//         console.error(error);
-//       } else {
-//         setBrands(data);
-//       }
-//     };
-//
-//     fetchBrands();
-//   }, []);
-//
-//   const handleSubmit = async (e: React.FormEvent) => {
-//     e.preventDefault();
-//
-//     if (!name || !brand) {
-//       console.error('Необходимо выбрать бренд и ввести название товара.');
-//       return;
-//     }
-//
-//     // Генерация slug
-//     const slug = name.toLowerCase().replace(/\s+/g, '-');
-//
-//     const { data, error } = await supabase.from('products').insert([
-//       {
-//         name,
-//         brand_id: brand,
-//         stock,
-//         price,
-//         description,
-//         slug
-//       }
-//     ]);
-//
-//     if (error) {
-//       console.error(error);
-//       return;
-//     }
-//
-//     router.push('/admin/products');
-//   };
-//
-//   return (
-//     <form onSubmit={handleSubmit}>
-//       <div>
-//         <label className="block mb-1">Название товара</label>
-//         <input
-//           type="text"
-//           className="w-full border rounded p-2"
-//           value={name}
-//           onChange={(e) => setName(e.target.value)}
-//           required
-//         />
-//       </div>
-//
-//       <div>
-//         <label className="block mb-1">Цена</label>
-//         <input
-//           type="number"
-//           className="w-full border rounded p-2"
-//           value={price}
-//           onChange={(e) => setPrice(Number(e.target.value))}
-//           required
-//         />
-//       </div>
-//
-//       <div>
-//         <label className="block mb-1">Остатки</label>
-//         <input
-//           type="number"
-//           className="w-full border rounded p-2"
-//           value={stock}
-//           onChange={(e) => setStock(Number(e.target.value))}
-//           required
-//         />
-//       </div>
-//
-//       <div>
-//         <label className="block mb-1">Описание товара</label>
-//         <textarea
-//           className="w-full border rounded p-2"
-//           value={description}
-//           onChange={(e) => setDescription(e.target.value)}
-//         />
-//       </div>
-//
-//       <div>
-//         <label className="block mb-1">Бренд</label>
-//         <select
-//           className="w-full border rounded p-2"
-//           value={brand}
-//           onChange={(e) => setBrand(e.target.value)}
-//           required
-//         >
-//           <option value="">Выберите бренд</option>
-//           {brands.map((brandItem) => (
-//             <option key={brandItem.id} value={brandItem.id}>
-//               {brandItem.name} {/* Отображаем имя бренда */}
-//             </option>
-//           ))}
-//         </select>
-//       </div>
-//
-//       <button type="submit" className="w-full mt-4 p-2 bg-blue-500 text-white rounded">
-//         Создать товар
-//       </button>
-//     </form>
-//   );
-// };
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -156,6 +26,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { uploadFilesToSupabase } from '@/lib/utils';
+import Image from 'next/image';
 
 const formSchema = z.object({
   name: z.string().min(3, 'Name must be at least 3 characters'),
@@ -170,6 +41,7 @@ const formSchema = z.object({
   price: z.coerce.number().positive('Price must be positive'),
   currency: z.enum(['USD', 'EUR', 'BYN', 'RUB']),
   condition: z.enum(['Новое', 'Б/У']),
+  stock: z.coerce.number().min(0, 'Stock cannot be negative'),
   images: z.string().array().optional()
 });
 
@@ -197,6 +69,7 @@ export default function CreateProduct() {
       price: 0,
       currency: 'USD',
       condition: 'Б/У',
+      stock: 1,
       images: []
     }
   });
@@ -459,7 +332,6 @@ export default function CreateProduct() {
               )}
             />
 
-
             <FormField
               control={form.control}
               name="condition"
@@ -480,6 +352,20 @@ export default function CreateProduct() {
                       <SelectItem value="Б/У">Б/У</SelectItem>
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="stock"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Stock</FormLabel>
+                  <FormControl>
+                    <Input type="number" min="0" placeholder="Enter stock quantity" {...field} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -542,10 +428,11 @@ export default function CreateProduct() {
                     <div className="flex flex-wrap gap-2 mt-4">
                       {previewImages.map((preview, index) => (
                         <div key={index} className="relative w-24 h-24">
-                          <img
+                          <Image
                             src={preview.url}
                             alt="preview"
-                            className="w-full h-full object-cover rounded-md border"
+                            fill
+                            className="object-cover rounded-md border"
                           />
                           <button
                             type="button"

@@ -1,5 +1,3 @@
-import { BRAND } from 'zod';
-
 export type Json =
   | string
   | number
@@ -407,17 +405,22 @@ export interface Database {
           sale_price: number | null
           stock: number
           brand_id: string
-          images: Json | null
+          images: string[] | null
           specifications: Json | null
           featured: boolean | null
           created_at: string
           updated_at: string
+          model: string | null
+          year: number | null
+          volume: number | null
+          fuel_type: 'Бензин' | 'Дизель' | null
+          body_type: 'Седан' | 'Универсал' | 'Хэтчбэк' | 'Минивэн' | 'Купе' | 'Фургон' | null
+          transmission: 'Механика' | 'Автомат' | null
+          currency: 'USD' | 'EUR' | 'BYN' | 'RUB' | null
+          condition: 'Новое' | 'Б/У' | null
           brands: {
-            id: string;        // id бренда
-            name: string;      // имя бренда
-            description: string | null; // описание бренда (если есть)
-            logo: string | null;  // например, лого бренда (если есть)
-          } | null; // Если бренд существует, то будет объект, если нет - null
+            name: string
+          } | null
         }
         Insert: {
           id?: string
@@ -428,11 +431,19 @@ export interface Database {
           sale_price?: number | null
           stock?: number
           brand_id: string
-          images?: Json | null
+          images?: string[] | null
           specifications?: Json | null
           featured?: boolean | null
           created_at?: string
           updated_at?: string
+          model?: string | null
+          year?: number | null
+          volume?: number | null
+          fuel_type?: 'Бензин' | 'Дизель' | null
+          body_type?: 'Седан' | 'Универсал' | 'Хэтчбэк' | 'Минивэн' | 'Купе' | 'Фургон' | null
+          transmission?: 'Механика' | 'Автомат' | null
+          currency?: 'USD' | 'EUR' | 'BYN' | 'RUB' | null
+          condition?: 'Новое' | 'Б/У' | null
         }
         Update: {
           id?: string
@@ -443,11 +454,19 @@ export interface Database {
           sale_price?: number | null
           stock?: number
           brand_id?: string
-          images?: Json | null
+          images?: string[] | null
           specifications?: Json | null
           featured?: boolean | null
           created_at?: string
           updated_at?: string
+          model?: string | null
+          year?: number | null
+          volume?: number | null
+          fuel_type?: 'Бензин' | 'Дизель' | null
+          body_type?: 'Седан' | 'Универсал' | 'Хэтчбэк' | 'Минивэн' | 'Купе' | 'Фургон' | null
+          transmission?: 'Механика' | 'Автомат' | null
+          currency?: 'USD' | 'EUR' | 'BYN' | 'RUB' | null
+          condition?: 'Новое' | 'Б/У' | null
         }
         Relationships: [
           {

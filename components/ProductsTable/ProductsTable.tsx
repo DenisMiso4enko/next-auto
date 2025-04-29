@@ -5,8 +5,13 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { twMerge } from 'tailwind-merge';
 import { Database } from '@/lib/database.types';
 import Link from 'next/link';
+import * as Dialog from '@radix-ui/react-dialog';
 
-type Product = Database['public']['Tables']['products']['Row'];
+type Product = Database['public']['Tables']['products']['Row'] & {
+  brands: {
+    name: string;
+  } | null;
+};
 
 const PAGE_SIZE = 10;
 
@@ -24,6 +29,7 @@ export default function ProductsTable() {
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<SortField>('created_at' as SortField);
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
@@ -74,6 +80,26 @@ export default function ProductsTable() {
     }
   }
 
+  async function deleteProduct(productId: string) {
+    try {
+      const { error } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', productId);
+
+      if (error) {
+        console.error('Error deleting product:', error);
+        return;
+      }
+
+      // Refresh the products list after deletion
+      fetchProducts();
+      setProductToDelete(null);
+    } catch (error) {
+      console.error('Error deleting product:', error);
+    }
+  }
+
   return (
     <div className="p-4">
       <div className="flex items-center justify-between">
@@ -82,7 +108,7 @@ export default function ProductsTable() {
           href="/admin/products/create"
           className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
         >
-          Создать продукт
+          Create Product
         </Link>
       </div>
 
@@ -99,6 +125,35 @@ export default function ProductsTable() {
           className="border px-4 py-2 rounded w-full max-w-xs focus:outline-none focus:ring focus:border-blue-300"
         />
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog.Root open={!!productToDelete} onOpenChange={(open) => !open && setProductToDelete(null)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/50" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-lg">
+            <Dialog.Title className="text-lg font-semibold mb-4">
+              Confirm Delete
+            </Dialog.Title>
+            <Dialog.Description className="mb-4">
+              Are you sure you want to delete the product {productToDelete?.name}? This action cannot be undone.
+            </Dialog.Description>
+            <div className="flex justify-end gap-4">
+              <button
+                onClick={() => setProductToDelete(null)}
+                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => productToDelete && deleteProduct(productToDelete.id)}
+                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+              >
+                Delete
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       {/* Table */}
       <div className="overflow-x-auto rounded-lg shadow">
@@ -147,6 +202,7 @@ export default function ProductsTable() {
               <div className="flex items-center gap-1">
                 Действия
               </div>
+              
             </th>
           </tr>
           </thead>
@@ -165,7 +221,6 @@ export default function ProductsTable() {
             </tr>
           ) : (
             products.map((product) => {
-              console.log('product.brand_id', product);
               return (
                 <tr
                   key={product.id}
@@ -181,10 +236,16 @@ export default function ProductsTable() {
                     {new Date(product.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-2">${product.price?.toFixed(2)}</td>
-                  <td className="px-4 py-2">
+                  <td className="px-4 py-2 flex gap-2 items-center">
                     <Link href={`/admin/products/${product.id}`} className="text-blue-500 hover:underline">
-                      {product.name}
+                      Edit
                     </Link>
+                    <button 
+                      onClick={() => setProductToDelete(product)} 
+                      className='bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 transition'
+                    >
+                      Delete
+                    </button>
                   </td>
 
                 </tr>

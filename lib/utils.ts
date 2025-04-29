@@ -27,31 +27,59 @@ export const setUserRole = (user: User | null) => {
 };
 
 
-export async function uploadFilesToSupabase(files: File[]): Promise<string[]> {
-  const uploadedUrls: string[] = [];
+// export async function uploadFilesToSupabase(files: File[]): Promise<string[]> {
+//   const uploadedUrls: string[] = [];
 
-  for (const file of files) {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
-    const filePath = `products/${fileName}`;
+//   for (const file of files) {
+//     const fileExt = file.name.split('.').pop();
+//     const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
+//     const filePath = `products/${fileName}`;
 
-    const { error } = await supabase.storage
-      .from('products') // название бакета в Supabase Storage
-      .upload(filePath, file);
+//     const { error } = await supabase.storage
+//       .from('products') // название бакета в Supabase Storage
+//       .upload(filePath, file);
 
-    if (error) {
-      console.error('Ошибка при загрузке файла:', error);
-      throw error;
-    }
+//     if (error) {
+//       console.error('Ошибка при загрузке файла:', error);
+//       throw error;
+//     }
 
-    const { data } = supabase.storage
-      .from('your-bucket-name')
-      .getPublicUrl(filePath);
+//     const { data } = supabase.storage
+//       .from('your-bucket-name')
+//       .getPublicUrl(filePath);
 
-    if (data?.publicUrl) {
-      uploadedUrls.push(data.publicUrl);
-    }
-  }
+//     if (data?.publicUrl) {
+//       uploadedUrls.push(data.publicUrl);
+//     }
+//   }
 
-  return uploadedUrls;
+//   return uploadedUrls;
+// }
+function sanitizeFileName(name: string ) {
+  let safe = name.replace(/\s+/g, '_');
+  safe = safe.replace(/[^a-zA-Z0-9._-]/g, '');
+  return safe;
 }
+
+export async function uploadFilesToSupabase(files: File[]) {
+  const bucket = 'products';
+  const urls = [];
+  for (const file of files) {
+    const filePath = `products/${Date.now()}-${Math.random()}-${sanitizeFileName(file.name)}`;
+    const { error } = await supabase.storage.from(bucket).upload(filePath, file);
+    if (error) throw error;
+    urls.push(filePath);
+  }
+  return urls;
+}
+// export async function uploadFilesToSupabase(files: File[]) {
+//   const bucket = 'products'; // ваше имя бакета
+//   const urls = [];
+//   for (const file of files) {
+//     const filePath = `${Date.now()}-${Math.random()}-${file.name}`;
+//     const { error } = await supabase.storage.from(bucket).upload(filePath, file);
+//     if (error) throw error;
+//     urls.push(filePath); // сохраняем только путь!
+//   }
+//   return urls;
+// }
